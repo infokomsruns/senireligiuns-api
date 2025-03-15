@@ -2,61 +2,62 @@ import express from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
 import multer from "multer";
+import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import path from "path";
-import fs from "fs/promises";
-import { fileURLToPath } from 'url';
 
 dotenv.config();
 
 const SECRET_KEY = process.env.SECRET_KEY;
 const prisma = new PrismaClient();
 
-// Get the directory name for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Configure multer for local file storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, 'uploads');
-    // Create uploads directory if it doesn't exist
-    fs.mkdir(uploadDir, { recursive: true })
-      .then(() => cb(null, uploadDir))
-      .catch(err => cb(err, null));
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+// Supabase configuration
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+const BUCKET_NAME = "uploads"; // Replace with your Supabase storage bucket name
+
+// Configure multer (no need for local disk storage)
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Upload file to Supabase
+const uploadToSupabase = async (file) => {
+  const uniqueFilename = `${Date.now()}-${file.originalname}`;
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(uniqueFilename, file.buffer, {
+      contentType: file.mimetype,
+    });
+
+  if (error) {
+    console.error("Supabase upload error:", error);
+    throw new Error("Failed to upload file to Supabase");
   }
-});
 
-const upload = multer({ storage: storage });
-
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Function to generate public URL for local file
-const getLocalFileUrl = (filename) => {
-  return `/uploads/${filename}`;
+  // Dapatkan URL publik
+  return supabase.storage.from(BUCKET_NAME).getPublicUrl(uniqueFilename).data
+    .publicUrl;
 };
 
-// Function to delete local file
-const deleteLocalFile = async (filePath) => {
-  try {
-    // Convert URL to file path if needed
-    const fullPath = path.join(__dirname, filePath.replace(/^\//, ''));
-    await fs.unlink(fullPath);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      console.error("Error deleting local file:", error);
-      throw new Error("Failed to delete local file");
-    }
+// Hapus file dari Supabase
+const deleteFromSupabase = async (fileUrl) => {
+  const decodedFileUrl = decodeURIComponent(fileUrl); // Decode URL untuk menangani spasi
+  const filePath = decodedFileUrl.replace(
+    `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/`,
+    ""
+  );
+  console.log("File Path to be deleted:", filePath);
+  const { error } = await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+
+  if (error) {
+    console.error("Supabase delete error:", error);
+    throw new Error("Failed to delete file from Supabase");
   }
 };
 
@@ -138,7 +139,7 @@ app.post("/api/news", upload.single("image"), async (req, res) => {
 
   try {
     const image = req.file 
-      ? getLocalFileUrl(req.file.filename) 
+      ? await uploadToSupabase(req.file.filename) 
       : null;
 
     const newNews = await prisma.news.create({
@@ -176,11 +177,11 @@ app.put("/api/news/:id", upload.single("image"), async (req, res) => {
     // If new file is uploaded, handle image update
     let newImage = null;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
 
       // Delete old image file if it exists
       if (existingNews.image) {
-        await deleteLocalFile(existingNews.image);
+        await deleteFromSupabase(existingNews.image);
       }
     }
 
@@ -219,7 +220,7 @@ app.delete("/api/news/:id", async (req, res) => {
 
     // Delete associated image file if it exists
     if (existingNews.image) {
-      await deleteLocalFile(existingNews.image);
+      await deleteFromSupabase(existingNews.image);
     }
 
     // Delete news from database
@@ -259,11 +260,11 @@ app.put("/api/hero/:id", upload.single("image"), async (req, res) => {
     // Jika ada file baru, simpan ke local storage
     let newImage = null;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
 
       // Hapus file lama jika ada
       if (existingHero.image) {
-        await deleteLocalFile(existingHero.image);
+        await deleteFromSupabase(existingHero.image);
       }
     }
 
@@ -306,7 +307,7 @@ app.post("/api/extracurriculars", upload.single("image"), async (req, res) => {
   const { name, description } = req.body;
 
   try {
-    const image = req.file ? getLocalFileUrl(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
 
     const newExtracurricular = await prisma.extracurricular.create({
       data: {
@@ -342,11 +343,11 @@ app.put("/api/extracurriculars/:id", upload.single("image"), async (req, res) =>
     // If new file is uploaded, handle image update
     let newImage = null;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
 
       // Delete old image file if it exists
       if (existingExtracurricular.image) {
-        await deleteLocalFile(existingExtracurricular.image);
+        await deleteFromSupabase(existingExtracurricular.image);
       }
     }
 
@@ -385,7 +386,7 @@ app.delete("/api/extracurriculars/:id", async (req, res) => {
 
     // Delete associated image file if it exists
     if (existingExtracurricular.image) {
-      await deleteLocalFile(existingExtracurricular.image);
+      await deleteFromSupabase(existingExtracurricular.image);
     }
 
     // Delete extracurricular from database
@@ -425,9 +426,9 @@ app.put("/api/kalender/:id", upload.single("file"), async (req, res) => {
     let newFile = existingKalender.file;
 
     if (req.file) {
-      newFile = getLocalFileUrl(req.file.filename);
+      newFile = await uploadToSupabase(req.file.filename);
       if (existingKalender.file) {
-        await deleteLocalFile(existingKalender.file);
+        await deleteFromSupabase(existingKalender.file);
       }
     }
 
@@ -466,7 +467,7 @@ app.post("/api/alumni", upload.single("image"), async (req, res) => {
   const { title, description } = req.body;
 
   try {
-    const image = req.file ? getLocalFileUrl(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
 
     const newAlumni = await prisma.alumni.create({
       data: {
@@ -498,11 +499,11 @@ app.put("/api/alumni/:id", upload.single("image"), async (req, res) => {
 
     let newImage = null;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
 
       // Delete the old image file from the server
       if (existingAlumni.image) {
-        await deleteLocalFile(existingAlumni.image);
+        await deleteFromSupabase(existingAlumni.image);
       }
     }
 
@@ -536,7 +537,7 @@ app.delete("/api/alumni/:id", async (req, res) => {
 
     // Delete the file associated with the alumni from local storage
     if (existingAlumni.image) {
-      await deleteLocalFile(existingAlumni.image);
+      await deleteFromSupabase(existingAlumni.image);
     }
 
     await prisma.alumni.delete({
@@ -569,7 +570,7 @@ app.post("/api/galeri", upload.single("image"), async (req, res) => {
   const { title } = req.body;
 
   try {
-    const image = req.file ? getLocalFileUrl(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
 
     const newGaleri = await prisma.galeri.create({
       data: {
@@ -602,9 +603,9 @@ app.put("/api/galeri/:id", upload.single("image"), async (req, res) => {
 
     let newImage = existingGaleri.image;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
       if (existingGaleri.image) {
-        await deleteLocalFile(existingGaleri.image);
+        await deleteFromSupabase(existingGaleri.image);
       }
     }
 
@@ -639,7 +640,7 @@ app.delete("/api/galeri/:id", async (req, res) => {
     }
 
     if (existingGaleri.image) {
-      await deleteLocalFile(existingGaleri.image);
+      await deleteFromSupabase(existingGaleri.image);
     }
 
     await prisma.galeri.delete({
@@ -672,7 +673,7 @@ app.post("/api/sarana", upload.single("image"), async (req, res) => {
   const { name, description } = req.body;
 
   try {
-    const image = req.file ? getLocalFileUrl(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
 
     const newSarana = await prisma.sarana.create({
       data: {
@@ -703,9 +704,9 @@ app.put("/api/sarana/:id", upload.single("image"), async (req, res) => {
 
     let newImage = null;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
       if (existingSarana.image) {
-        await deleteLocalFile(existingSarana.image);
+        await deleteFromSupabase(existingSarana.image);
       }
     }
 
@@ -737,7 +738,7 @@ app.delete("/api/sarana/:id", async (req, res) => {
     }
 
     if (existingSarana.image) {
-      await deleteLocalFile(existingSarana.image);
+      await deleteFromSupabase(existingSarana.image);
     }
 
     await prisma.sarana.delete({
@@ -774,11 +775,11 @@ app.put("/api/headmaster-message/:id", upload.single("image"), async (req, res) 
     // Jika ada gambar baru, unggah ke penyimpanan lokal
     let newImage = null;
     if (req.file) {
-      newImage = getLocalFileUrl(req.file.filename);
+      newImage = await uploadToSupabase(req.file.filename);
 
       // Hapus gambar lama dari penyimpanan lokal jika ada
       if (existingMessage.image) {
-        await deleteLocalFile(existingMessage.image);
+        await deleteFromSupabase(existingMessage.image);
       }
     }
 
@@ -811,7 +812,7 @@ app.post("/api/sejarah", upload.single("image"), async (req, res) => {
   const { period, text } = req.body;
   let imageUrl = null;
   if (req.file) {
-    imageUrl = getLocalFileUrl(req.file.filename);
+    imageUrl = await uploadToSupabase(req.file.filename);
   }
   const newSejarah = await prisma.sejarah.create({
     data: { period, text, image: imageUrl },
@@ -831,9 +832,9 @@ app.put("/api/sejarah/:id", upload.single("image"), async (req, res) => {
   }
   let imageUrl = existingSejarah.image;
   if (req.file) {
-    imageUrl = getLocalFileUrl(req.file.filename);
+    imageUrl = await uploadToSupabase(req.file.filename);
     if (existingSejarah.image) {
-      await deleteLocalFile(existingSejarah.image);
+      await deleteFromSupabase(existingSejarah.image);
     }
   }
   const updatedSejarah = await prisma.sejarah.update({
@@ -854,7 +855,7 @@ app.delete("/api/sejarah/:id", async (req, res) => {
   }
   // Hapus file gambar dari penyimpanan lokal jika ada
   if (existingSejarah.image) {
-    await deleteLocalFile(existingSejarah.image);
+    await deleteFromSupabase(existingSejarah.image);
   }
   await prisma.sejarah.delete({
     where: { id: parseInt(id) },
@@ -882,275 +883,6 @@ app.put("/api/visi-misi/:id", async (req, res) => {
   });
 
   res.json(updatedVisiMisi);
-});
-
-app.get("/api/schoolinfo", async (req, res) => {
-  const schoolInfo = await prisma.schoolInfo.findFirst();
-  if (!schoolInfo) {
-    return res.status(404).json({ message: "School information not found" });
-  }
-  res.json(schoolInfo);
-});
-
-// Update SchoolInfo
-app.put("/api/schoolinfo/:id", async (req, res) => {
-  const { id } = req.params;
-  const {
-    akreditasi,
-    jumlahGuru,
-    tenagaPendidikan,
-    jumlahSiswa,
-    namaSekolah,
-    nspn,
-    jenjangPendidikan,
-    statusSekolah,
-    alamat,
-    rtRw,
-    kodePos,
-    kecamatan,
-    kabKota,
-    provinsi,
-    negara,
-    posisiGeografis,
-  } = req.body;
-
-  const updatedSchoolInfo = await prisma.schoolInfo.update({
-    where: { id: parseInt(id) },
-    data: {
-      akreditasi,
-      jumlahGuru,
-      tenagaPendidikan,
-      jumlahSiswa,
-      namaSekolah,
-      nspn,
-      jenjangPendidikan,
-      statusSekolah,
-      alamat,
-      rtRw,
-      kodePos,
-      kecamatan,
-      kabKota,
-      provinsi,
-      negara,
-      posisiGeografis,
-    },
-  });
-
-  res.json(updatedSchoolInfo);
-});
-
-// Endpoint untuk mendapatkan strukturOrganisasi
-app.get("/api/strukturOrganisasi", async (req, res) => {
-  try {
-    const strukturOrganisasi = await prisma.strukturOrganisasi.findMany();
-    res.json(strukturOrganisasi);
-  } catch (error) {
-    console.error("Failed to fetch struktur organisasi:", error);
-    res.status(500).json({ error: "Failed to fetch struktur organisasi" });
-  }
-});
-
-// Add Struktur Organisasi with image upload
-app.post("/api/strukturOrganisasi", upload.single("image"), async (req, res) => {
-  const { role, name } = req.body;
-  const image = req.file ? await uploadToSupabase(req.file) : null;
-
-  try {
-    const newPerson = await prisma.strukturOrganisasi.create({
-      data: {
-        role,
-        name,
-        image,
-      },
-    });
-    res.json(newPerson);
-  } catch (error) {
-    console.error("Failed to create struktur organisasi:", error);
-    res.status(500).json({ error: "Failed to create struktur organisasi" });
-  }
-});
-
-// Update Struktur Organisasi with image upload
-app.put("/api/strukturOrganisasi/:id", upload.single("image"), async (req, res) => {
-  const { id } = req.params;
-  const { role, name } = req.body;
-  let newImage = null;
-
-  try {
-    const existingPerson = await prisma.strukturOrganisasi.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingPerson) {
-      return res.status(404).json({ error: "Struktur Organisasi not found" });
-    }
-
-    // If a new file is uploaded, delete the old one
-    if (req.file) {
-      newImage = await uploadToSupabase(req.file);
-
-      if (existingPerson.image) {
-        await deleteFromSupabase(existingPerson.image);
-      }
-    }
-
-    const updatedPerson = await prisma.strukturOrganisasi.update({
-      where: { id: parseInt(id) },
-      data: {
-        role,
-        name,
-        image: newImage || existingPerson.image, // Use new image or keep old one
-      },
-    });
-    res.json(updatedPerson);
-  } catch (error) {
-    console.error("Failed to update struktur organisasi:", error);
-    res.status(500).json({ error: "Failed to update struktur organisasi" });
-  }
-});
-
-// Delete Struktur Organisasi and its image from Supabase
-app.delete("/api/strukturOrganisasi/:id", async (req, res) => {
-  const { id } = req.params;
-  const parsedId = parseInt(id); // Ensure id is an integer
-  if (isNaN(parsedId)) {
-    return res.status(400).json({ error: "Invalid ID" });
-  }
-
-  try {
-    const existingPerson = await prisma.strukturOrganisasi.findUnique({
-      where: { id: parsedId },
-    });
-
-    if (!existingPerson) {
-      return res.status(404).json({ error: "Struktur Organisasi not found" });
-    }
-
-    // Delete the file associated with the person from Supabase if exists
-    if (existingPerson.image) {
-      await deleteFromSupabase(existingPerson.image);
-    }
-
-    // Delete the structure from the database
-    await prisma.strukturOrganisasi.delete({
-      where: { id: parsedId },
-    });
-
-    res.status(204).send(); // Successfully deleted
-  } catch (error) {
-    console.error("Failed to delete struktur organisasi with id:", parsedId, error);
-    res.status(500).send("Error deleting struktur organisasi");
-  }
-});
-
-// Create new staff or teacher
-app.post("/api/staffandteachers", upload.single("image"), async (req, res) => {
-  const { name, role } = req.body;
-  const image = req.file ? await uploadToSupabase(req.file) : null;  // Upload to Supabase
-
-  try {
-    const newStaffAndTeacher = await prisma.staffAndTeacher.create({
-      data: {
-        name,
-        role,
-        image,  // Save the Supabase image URL
-      },
-    });
-    res.status(201).json(newStaffAndTeacher);
-  } catch (error) {
-    console.error("Error creating staff or teacher:", error);
-    res.status(500).json({ error: "Failed to create staff or teacher" });
-  }
-});
-
-// Get all staff and teachers
-app.get("/api/staffandteachers", async (req, res) => {
-  const staffAndTeachers = await prisma.staffAndTeacher.findMany();
-  res.json(staffAndTeachers);
-});
-
-// Get staff and teacher by ID
-app.get("/api/staffandteachers/:id", async (req, res) => {
-  const { id } = req.params;
-  const staffAndTeacher = await prisma.staffAndTeacher.findUnique({
-    where: { id: parseInt(id) },
-  });
-  res.json(staffAndTeacher);
-});
-
-// Update staff and teacher
-app.put("/api/staffandteachers/:id", upload.single("image"), async (req, res) => {
-  const { id } = req.params;
-  const { name, role } = req.body;
-
-  try {
-    // Get the existing staff/teacher data
-    const existingStaffAndTeacher = await prisma.staffAndTeacher.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingStaffAndTeacher) {
-      return res.status(404).json({ error: "Staff or teacher not found" });
-    }
-
-    let newImage = existingStaffAndTeacher.image;
-
-    // If there's a new image, upload it and delete the old one
-    if (req.file) {
-      newImage = await uploadToSupabase(req.file);
-
-      // Delete the old image from Supabase
-      if (existingStaffAndTeacher.image) {
-        await deleteFromSupabase(existingStaffAndTeacher.image);
-      }
-    }
-
-    // Update the staff/teacher record
-    const updatedStaffAndTeacher = await prisma.staffAndTeacher.update({
-      where: { id: parseInt(id) },
-      data: {
-        name,
-        role,
-        image: newImage,  // Set the new image or keep the old one
-      },
-    });
-
-    res.json(updatedStaffAndTeacher);
-  } catch (error) {
-    console.error("Error updating staff or teacher:", error);
-    res.status(500).json({ error: "Failed to update staff or teacher" });
-  }
-});
-
-// Delete staff or teacher
-app.delete("/api/staffandteachers/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    // Get the existing staff/teacher data
-    const existingStaffAndTeacher = await prisma.staffAndTeacher.findUnique({
-      where: { id: parseInt(id) },
-    });
-
-    if (!existingStaffAndTeacher) {
-      return res.status(404).json({ error: "Staff or teacher not found" });
-    }
-
-    // Delete the image from Supabase if it exists
-    if (existingStaffAndTeacher.image) {
-      await deleteFromSupabase(existingStaffAndTeacher.image);
-    }
-
-    // Delete the staff/teacher record
-    await prisma.staffAndTeacher.delete({
-      where: { id: parseInt(id) },
-    });
-
-    res.status(204).send();  // Respond with no content
-  } catch (error) {
-    console.error("Error deleting staff or teacher:", error);
-    res.status(500).json({ error: "Failed to delete staff or teacher" });
-  }
 });
 
 // Create a new contact message

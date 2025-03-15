@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Admin {
@@ -26,13 +27,6 @@ model News {
   description String
   image     String?
   publishedAt DateTime
-}
-
-model Announcement {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String
-  publishedDate DateTime
 }
 
 model Extracurricular {
@@ -87,47 +81,6 @@ model VisiMisi {
   id      Int    @id @default(autoincrement())
   visi    String
   misi    String[]
-}
-
-model SchoolInfo {
-  id              Int     @id @default(autoincrement())
-  akreditasi      String
-  jumlahGuru      Int
-  tenagaPendidikan Int
-  jumlahSiswa     Int
-  namaSekolah     String
-  nspn            String
-  jenjangPendidikan String
-  statusSekolah   String
-  alamat          String
-  rtRw            String
-  kodePos         String
-  kecamatan       String
-  kabKota         String
-  provinsi        String
-  negara          String
-  posisiGeografis String
-}
-
-model StrukturOrganisasi {
-  id    Int    @id @default(autoincrement())
-  role  String
-  name  String
-  image String
-}
-
-model StaffAndTeacher {
-  id    Int    @id @default(autoincrement())
-  name  String
-  role  String
-  image String
-}
-
-model KelasSR {
-  id         Int      @id @default(autoincrement())
-  nama       String
-  deskripsi  String?
-  createdAt  DateTime @default(now())
 }
 
 model Contact {
