@@ -464,7 +464,7 @@ app.get("/api/alumni/:id", async (req, res) => {
 
 // Add alumni with image upload
 app.post("/api/alumni", upload.single("image"), async (req, res) => {
-  const { title, description } = req.body;
+  const { title } = req.body;
 
   try {
     const image = req.file ? await uploadToSupabase(req.file) : null;
@@ -472,7 +472,6 @@ app.post("/api/alumni", upload.single("image"), async (req, res) => {
     const newAlumni = await prisma.alumni.create({
       data: {
         title,
-        description,
         image,
       },
     });
@@ -486,7 +485,7 @@ app.post("/api/alumni", upload.single("image"), async (req, res) => {
 // Update alumni with image upload
 app.put("/api/alumni/:id", upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  const { title, description } = req.body;
+  const { title } = req.body;
 
   try {
     const existingAlumni = await prisma.alumni.findUnique({
@@ -511,7 +510,6 @@ app.put("/api/alumni/:id", upload.single("image"), async (req, res) => {
       where: { id: parseInt(id) },
       data: {
         title,
-        description,
         image: newImage || existingAlumni.image,
       },
     });

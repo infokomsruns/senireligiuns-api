@@ -45,7 +45,6 @@ model Kalender {
 model Alumni {
   id          Int      @id @default(autoincrement())
   title       String
-  description String
   image       String?
 }
 
