@@ -139,7 +139,7 @@ app.post("/api/news", upload.single("image"), async (req, res) => {
 
   try {
     const image = req.file 
-      ? await uploadToSupabase(req.file.filename) 
+      ? await uploadToSupabase(req.file.file) 
       : null;
 
     const newNews = await prisma.news.create({
@@ -177,7 +177,7 @@ app.put("/api/news/:id", upload.single("image"), async (req, res) => {
     // If new file is uploaded, handle image update
     let newImage = null;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
 
       // Delete old image file if it exists
       if (existingNews.image) {
@@ -260,7 +260,7 @@ app.put("/api/hero/:id", upload.single("image"), async (req, res) => {
     // Jika ada file baru, simpan ke local storage
     let newImage = null;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
 
       // Hapus file lama jika ada
       if (existingHero.image) {
@@ -307,7 +307,7 @@ app.post("/api/extracurriculars", upload.single("image"), async (req, res) => {
   const { name, description } = req.body;
 
   try {
-    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.file) : null;
 
     const newExtracurricular = await prisma.extracurricular.create({
       data: {
@@ -343,7 +343,7 @@ app.put("/api/extracurriculars/:id", upload.single("image"), async (req, res) =>
     // If new file is uploaded, handle image update
     let newImage = null;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
 
       // Delete old image file if it exists
       if (existingExtracurricular.image) {
@@ -426,7 +426,7 @@ app.put("/api/kalender/:id", upload.single("file"), async (req, res) => {
     let newFile = existingKalender.file;
 
     if (req.file) {
-      newFile = await uploadToSupabase(req.file.filename);
+      newFile = await uploadToSupabase(req.file.file);
       if (existingKalender.file) {
         await deleteFromSupabase(existingKalender.file);
       }
@@ -467,7 +467,7 @@ app.post("/api/alumni", upload.single("image"), async (req, res) => {
   const { title, description } = req.body;
 
   try {
-    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.file) : null;
 
     const newAlumni = await prisma.alumni.create({
       data: {
@@ -499,7 +499,7 @@ app.put("/api/alumni/:id", upload.single("image"), async (req, res) => {
 
     let newImage = null;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
 
       // Delete the old image file from the server
       if (existingAlumni.image) {
@@ -570,7 +570,7 @@ app.post("/api/galeri", upload.single("image"), async (req, res) => {
   const { title } = req.body;
 
   try {
-    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.file) : null;
 
     const newGaleri = await prisma.galeri.create({
       data: {
@@ -603,7 +603,7 @@ app.put("/api/galeri/:id", upload.single("image"), async (req, res) => {
 
     let newImage = existingGaleri.image;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
       if (existingGaleri.image) {
         await deleteFromSupabase(existingGaleri.image);
       }
@@ -673,7 +673,7 @@ app.post("/api/sarana", upload.single("image"), async (req, res) => {
   const { name, description } = req.body;
 
   try {
-    const image = req.file ? await uploadToSupabase(req.file.filename) : null;
+    const image = req.file ? await uploadToSupabase(req.file.file) : null;
 
     const newSarana = await prisma.sarana.create({
       data: {
@@ -704,7 +704,7 @@ app.put("/api/sarana/:id", upload.single("image"), async (req, res) => {
 
     let newImage = null;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
       if (existingSarana.image) {
         await deleteFromSupabase(existingSarana.image);
       }
@@ -775,7 +775,7 @@ app.put("/api/headmaster-message/:id", upload.single("image"), async (req, res) 
     // Jika ada gambar baru, unggah ke penyimpanan lokal
     let newImage = null;
     if (req.file) {
-      newImage = await uploadToSupabase(req.file.filename);
+      newImage = await uploadToSupabase(req.file.file);
 
       // Hapus gambar lama dari penyimpanan lokal jika ada
       if (existingMessage.image) {
@@ -812,7 +812,7 @@ app.post("/api/sejarah", upload.single("image"), async (req, res) => {
   const { period, text } = req.body;
   let imageUrl = null;
   if (req.file) {
-    imageUrl = await uploadToSupabase(req.file.filename);
+    imageUrl = await uploadToSupabase(req.file.file);
   }
   const newSejarah = await prisma.sejarah.create({
     data: { period, text, image: imageUrl },
@@ -832,7 +832,7 @@ app.put("/api/sejarah/:id", upload.single("image"), async (req, res) => {
   }
   let imageUrl = existingSejarah.image;
   if (req.file) {
-    imageUrl = await uploadToSupabase(req.file.filename);
+    imageUrl = await uploadToSupabase(req.file.file);
     if (existingSejarah.image) {
       await deleteFromSupabase(existingSejarah.image);
     }
